@@ -1,16 +1,33 @@
 import argparse
-import enum
-from typing import Tuple, Optional
+import abc
+from typing import Optional, List
 
-class Token(enum.Enum):
-    LITERAL = 0
-    WHITESPACE = 1
-    POS_BR_OPEN = 2
-    POS_BR_CLOSE =  3
-    POS_NUM = 4
+class Argument:
+    def __init__(self, base: str) -> None:
+        self.base = base
+
+    @abc.abstractmethod
+    def substitute(self, args: list[str]) -> str:
+        raise NotImplementedError()
+
+class Positional(Argument):
+    def __init__(self, pos: int) -> None:
+        super().__init__('')
+        self.pos = pos
+
+    def substitute(self, args: list[str]) -> str:
+        return args[self.pos]
+
+class BasicString(Argument):
+    def __init__(self, base: str) -> None:
+        super().__init__(base)
+
+    def substitute(self, _: list[str]) -> str:
+        return self.base
 
 class Stream:
     def __init__(self, s: str) -> None:
+        self.base = s
         self._s = [c for c in s]
         self._i = 0
 
@@ -43,20 +60,50 @@ class Stream:
             self.consume()
         return skipped
 
+    def expect(self, s: str) -> bool:
+        if self.lookaround() == s:
+            self.consume()
+            return True
+        return False
+
     def is_at_end(self) -> bool:
         return self._i >= len(self._s)
 
     def curr(self) -> int:
         return self._i
 
-def get_token(s: Stream) -> Tuple[Token, str]:
-    if s.skip_spaces():
-        return (Token.WHITESPACE, ' ')
-    if s.lookaround() == '{' and s.lookaround(2) is None:
-        raise ValueError('')
-    if s.lookaround() == '{' and s.lookaround(2) == '{':
-        return (Token.POS_BR_OPEN, s.consume())
-
+def parse_fmt(s: str):
+    args: List[Argument] = []
+    st = Stream(s)
+    while not st.is_at_end():
+        if st.skip_spaces():
+            raise ValueError(f'Unexpected space in {st.base} at {st.curr()}')
+        if st.lookaround() == '{':
+            st.consume()
+            if st.lookaround() == '{':
+                st.consume()
+                args.append(BasicString('{'))
+            else:
+                pos = ''
+                while not st.is_at_end() and st.lookaround().isdigit():
+                    pos += st.consume()
+                if st.lookaround() != '}':
+                    raise ValueError(f'Expected "}}" in {st.base} at {st.curr()}')
+                st.consume()
+                args.append(Positional(int(pos)))
+        elif st.lookaround() == '}':
+            st.consume()
+            if st.lookaround() == '}':
+                st.consume()
+                args.append(BasicString('}'))
+            else:
+                raise ValueError(f'Unexpected "}}" in {st.base} at {st.curr()}')
+        else:
+            base = ''
+            while not st.is_at_end() and st.lookaround() not in '{}':
+                base += st.consume()
+            args.append(BasicString(base))
+    return args
 
 
 parser = argparse.ArgumentParser(description='Simpler xargs')
