@@ -19,6 +19,12 @@ class Positional(Argument):
     def substitute(self, args: list[str]) -> str:
         return args[self.pos]
 
+    def __str__(self) -> str:
+        return f'{type(self).__name__}({self.pos})'
+
+    def __repr__(self) -> str:
+        return str(self)
+
 class BasicString(Argument):
     def __init__(self, base: str) -> None:
         super().__init__(base)
@@ -28,6 +34,12 @@ class BasicString(Argument):
 
     def __add__(self, other: BasicString) -> BasicString:
         return BasicString(self.base + other.base)
+
+    def __str__(self) -> str:
+        return f'{type(self).__name__}("{self.base}")'
+
+    def __repr__(self) -> str:
+        return str(self)
 
 class Stream:
     def __init__(self, s: str) -> None:
@@ -42,30 +54,28 @@ class Stream:
         if self._i < 0:
             self._i = -1
 
-    def lookaround(self, i: int = 1) -> Optional[str]:
+    def look(self, i: int = 0) -> Optional[str]:
         t = self._i + i
         if t < 0 or t >= len(self._s):
             return None
         return self._s[t]
 
-    def consume(self, i: int = 1) -> Optional[str]:
-        c = self.lookaround(i)
+    def consume(self, i: int = 1) -> None:
         self._incr(i)
-        return c
 
     def prev(self) -> Optional[str]:
         self._incr(-1)
-        return self.lookaround()
+        return self.look()
 
     def skip_spaces(self) -> int:
         skipped = 0
-        while self.lookaround().isspace():
+        while self.look().isspace():
             skipped += 1
             self.consume()
         return skipped
 
     def expect(self, s: str) -> bool:
-        if self.lookaround() == s:
+        if self.look() == s:
             self.consume()
             return True
         return False
@@ -83,63 +93,59 @@ def parse_fmt(s: str):
         skipped_spaces = st.skip_spaces()
         if skipped_spaces > 0:
             args.append(BasicString(' ' * skipped_spaces))
-        elif st.lookaround() == '{':
+        elif st.look() == '{' and st.look(1) != '{':
             st.consume()
             if st.is_at_end():
-                raise ValueError(f'Expected "}}" in {st.base} at {st.curr()}')
-            elif st.lookaround() == '{':
+                raise ValueError(f'Expected "}}" in {st.base} at position {st.curr()}')
+            elif st.look() == '{':
                 st.consume()
                 args.append(BasicString('{'))
             else:
                 pos = ''
-                while not st.is_at_end() and st.lookaround().isdigit():
-                    pos += st.consume()
-                if st.lookaround() != '}':
-                    raise ValueError(f'Expected "}}" in {st.base} at {st.curr()}')
+                while not st.is_at_end() and st.look().isdigit():
+                    pos += st.look()
+                    st.consume()
+                if st.look() != '}':
+                    raise ValueError(f'Expected "}}" in {st.base} at position {st.curr()}')
                 st.consume()
                 args.append(Positional(int(pos)))
-        elif st.lookaround() == '}':
+        elif st.look() == '}':
             st.consume()
-            if st.lookaround() == '}':
+            if st.look() == '}':
                 st.consume()
                 args.append(BasicString('}'))
             else:
-                raise ValueError(f'Unexpected "}}" in {st.base} at {st.curr()}')
+                raise ValueError(f'Unexpected "}}" in {st.base} at position {st.curr()}')
         else:
-            base = ''
-            while not st.is_at_end() and st.lookaround() not in '{}':
-                base += st.consume()
-            args.append(BasicString(base))
+            curr = []
+            while not st.is_at_end():
+                if st.look() == '{':
+                    if st.look(1)  == '{':
+                        curr.append('{')
+                        st.consume(2)
+                    else:
+                        break
+                elif st.look() == '}':
+                    if st.look(1) == '}':
+                        curr.append('}')
+                        st.consume(2)
+                    else:
+                        raise ValueError(f'Unexpected "}}" in {st.base} at {st.curr()}')
+                else:
+                    curr.append(st.look())
+                    st.consume()
+            args.append(BasicString(''.join(curr)))
 
     #merge the basic strings
-    if len(args) <= 1:
-        return args
-
-    new_args = []
-    i = 0
-    j = 1
-    while True:
-        if j >= len(args):
-            break
-        if isinstance(args[i], Positional):
-            new_args.append(args[i])
-            i = j
-            j += 1
-        if isinstance(args[i], BasicString) and isinstance(args[j], BasicString):
-            args[i] = args[i].merge(args[j])
-            j += 1
-        else:
-            new_args.append(args[i])
-            i = j
-            j += 1
-    return new_args
-
+    return args
 
 parser = argparse.ArgumentParser(description='Simpler xargs')
 parser.add_argument('command', nargs='+', help='Command to run')
 
 def main(args: argparse.Namespace):
     print(args.command)
+    for c in args.command:
+        print(parse_fmt(c))
 
 if __name__ == '__main__':
     args = parser.parse_args()
