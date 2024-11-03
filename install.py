@@ -1,16 +1,22 @@
 import sys
 from pathlib import Path
 
-for f in Path('./bin/').glob('*'):
+DIR_BIN = Path('./bin/')
+DIR_SRC = Path('./src/')
+
+print(f'### Clearing {DIR_BIN} directory')
+for f in DIR_BIN.glob('*'):
     f.unlink()
-Path('./bin/').rmdir()
-Path('./bin/').mkdir()
+DIR_BIN.mkdir(exist_ok=True)
+print('...done')
 
-folders = [f for f in Path('.').iterdir() if f.is_dir() and f.name != 'bin' and f.name != '.git']
-
+print(f'### Finding programs...')
+folders = [f for f in DIR_SRC.iterdir() if f.is_dir() and f != DIR_BIN and not f.name.startswith('.')]
 for f in folders:
-    print(f'Found folder: {f}')
+    print(f'Found PROG: {f}')
+print(f'...done')
 
+print(f'### Installing...')
 for f in folders:
     main_files = list(f.glob(f'{f.name}.py'))
     if not main_files:
@@ -27,3 +33,4 @@ for f in folders:
             t.write(line)
     target.chmod(0o755) #make executable
     print(f'Installed {target}')
+print('...done. Exiting.')

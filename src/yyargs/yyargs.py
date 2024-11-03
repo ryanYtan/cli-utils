@@ -1,6 +1,8 @@
 from __future__ import annotations
 import argparse
 import abc
+import sys
+import subprocess
 from typing import Optional, List
 
 class Argument:
@@ -19,21 +21,27 @@ class Positional(Argument):
     def substitute(self, args: list[str]) -> str:
         return args[self.pos]
 
+    def __eq__(self, value: object) -> bool:
+        return super().__eq__(value) and self.pos == value.pos
+
     def __str__(self) -> str:
         return f'{type(self).__name__}({self.pos})'
 
     def __repr__(self) -> str:
         return str(self)
 
-class BasicString(Argument):
+class Literal(Argument):
     def __init__(self, base: str) -> None:
         super().__init__(base)
 
     def substitute(self, _: list[str]) -> str:
         return self.base
 
-    def __add__(self, other: BasicString) -> BasicString:
-        return BasicString(self.base + other.base)
+    def __add__(self, other: Literal) -> Literal:
+        return Literal(self.base + other.base)
+
+    def __eq__(self, value: object) -> bool:
+        return super().__eq__(value) and self.base == value.base
 
     def __str__(self) -> str:
         return f'{type(self).__name__}("{self.base}")'
@@ -92,14 +100,14 @@ def parse_fmt(s: str):
     while not st.is_at_end():
         skipped_spaces = st.skip_spaces()
         if skipped_spaces > 0:
-            args.append(BasicString(' ' * skipped_spaces))
+            args.append(Literal(' ' * skipped_spaces))
         elif st.look() == '{' and st.look(1) != '{':
             st.consume()
             if st.is_at_end():
                 raise ValueError(f'Expected "}}" in {st.base} at position {st.curr()}')
             elif st.look() == '{':
                 st.consume()
-                args.append(BasicString('{'))
+                args.append(Literal('{'))
             else:
                 pos = ''
                 while not st.is_at_end() and st.look().isdigit():
@@ -113,7 +121,7 @@ def parse_fmt(s: str):
             st.consume()
             if st.look() == '}':
                 st.consume()
-                args.append(BasicString('}'))
+                args.append(Literal('}'))
             else:
                 raise ValueError(f'Unexpected "}}" in {st.base} at position {st.curr()}')
         else:
@@ -134,7 +142,7 @@ def parse_fmt(s: str):
                 else:
                     curr.append(st.look())
                     st.consume()
-            args.append(BasicString(''.join(curr)))
+            args.append(Literal(''.join(curr)))
 
     #merge the basic strings
     return args
@@ -143,9 +151,17 @@ parser = argparse.ArgumentParser(description='Simpler xargs')
 parser.add_argument('command', nargs='+', help='Command to run')
 
 def main(args: argparse.Namespace):
-    print(args.command)
-    for c in args.command:
-        print(parse_fmt(c))
+    formatter = [parse_fmt(c) for c in args.command]
+    for line in sys.stdin:
+        line = line.rstrip('\r\n')
+        line = line.split(' ')
+        cmd = []
+        for f in formatter:
+            arg = []
+            for a in f:
+                arg.append(a.substitute(line))
+            cmd.append(''.join(arg))
+        subprocess.run(cmd)
 
 if __name__ == '__main__':
     args = parser.parse_args()
