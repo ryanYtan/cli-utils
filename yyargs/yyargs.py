@@ -1,3 +1,4 @@
+from __future__ import annotations
 import argparse
 import abc
 from typing import Optional, List
@@ -24,6 +25,9 @@ class BasicString(Argument):
 
     def substitute(self, _: list[str]) -> str:
         return self.base
+
+    def __add__(self, other: BasicString) -> BasicString:
+        return BasicString(self.base + other.base)
 
 class Stream:
     def __init__(self, s: str) -> None:
@@ -53,10 +57,10 @@ class Stream:
         self._incr(-1)
         return self.lookaround()
 
-    def skip_spaces(self) -> bool:
-        skipped = False
+    def skip_spaces(self) -> int:
+        skipped = 0
         while self.lookaround().isspace():
-            skipped = True
+            skipped += 1
             self.consume()
         return skipped
 
@@ -76,11 +80,14 @@ def parse_fmt(s: str):
     args: List[Argument] = []
     st = Stream(s)
     while not st.is_at_end():
-        if st.skip_spaces():
-            raise ValueError(f'Unexpected space in {st.base} at {st.curr()}')
-        if st.lookaround() == '{':
+        skipped_spaces = st.skip_spaces()
+        if skipped_spaces > 0:
+            args.append(BasicString(' ' * skipped_spaces))
+        elif st.lookaround() == '{':
             st.consume()
-            if st.lookaround() == '{':
+            if st.is_at_end():
+                raise ValueError(f'Expected "}}" in {st.base} at {st.curr()}')
+            elif st.lookaround() == '{':
                 st.consume()
                 args.append(BasicString('{'))
             else:
@@ -103,15 +110,36 @@ def parse_fmt(s: str):
             while not st.is_at_end() and st.lookaround() not in '{}':
                 base += st.consume()
             args.append(BasicString(base))
-    return args
+
+    #merge the basic strings
+    if len(args) <= 1:
+        return args
+
+    new_args = []
+    i = 0
+    j = 1
+    while True:
+        if j >= len(args):
+            break
+        if isinstance(args[i], Positional):
+            new_args.append(args[i])
+            i = j
+            j += 1
+        if isinstance(args[i], BasicString) and isinstance(args[j], BasicString):
+            args[i] = args[i].merge(args[j])
+            j += 1
+        else:
+            new_args.append(args[i])
+            i = j
+            j += 1
+    return new_args
 
 
 parser = argparse.ArgumentParser(description='Simpler xargs')
-parser.add_argument('COMMAND', type=str, help='Command to run')
+parser.add_argument('command', nargs='+', help='Command to run')
 
 def main(args: argparse.Namespace):
     print(args.command)
-    print(args.args)
 
 if __name__ == '__main__':
     args = parser.parse_args()
