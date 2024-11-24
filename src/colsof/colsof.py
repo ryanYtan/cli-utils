@@ -23,13 +23,13 @@ def col_to_index(col: str) -> int:
 
 def main():
     args = parser.parse_args()
-    input_file: str = args.input_file
+    file: str = args.file
     sheet_name: str = args.sheet_name
     skip_header: bool = args.skip_header
     ignore_empty: bool = args.ignore_empty
     trim: bool = args.trim
 
-    wb = openpyxl.load_workbook(input_file)
+    wb = openpyxl.load_workbook(file, read_only=True)
     if sheet_name.isdigit():
         sheet_index = int(sheet_name)
         ws = wb.worksheets[sheet_index]
