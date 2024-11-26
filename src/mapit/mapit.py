@@ -15,8 +15,15 @@ def main():
     m = {}
     with open(input_mapping, 'r') as fp:
         for line in fp:
-            key, value = [(a[0].strip(), a[1].strip()) for a in line.strip(delimiter)]
-            m[key] = value
+            line = line.strip()
+            if not line:
+                continue
+            line = [x.strip() for x in line.split(delimiter)]
+            try:
+                key, value = line[0], line[1]
+                m[key] = value
+            except:
+                continue
     for line in sys.stdin:
         line = line.strip()
         if line in m:
