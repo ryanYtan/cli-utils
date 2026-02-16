@@ -21,6 +21,8 @@ class Positional(Argument):
         self.pos = pos
 
     def substitute(self, args: list[str]) -> str:
+        if self.pos >= len(args):
+            return ''
         return args[self.pos]
 
     def __eq__(self, value: object) -> bool:
@@ -149,7 +151,7 @@ def parse_fmt(s: str):
     #merge the basic strings
     return args
 
-parser = argparse.ArgumentParser(description='Simpler xargs')
+parser = argparse.ArgumentParser(description=f'A simpler xargs. Use positional arguments in the command with {{0}}, {{1}} e.g. `echo "a b c" | zargs -- echo "{{1}} {{0}} {{2}}"`')
 parser.add_argument('command', nargs='+', help='Command to run')
 
 def main(args: argparse.Namespace):
